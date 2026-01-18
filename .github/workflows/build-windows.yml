@@ -1,42 +1,48 @@
-name: Build OpenWV for Windows
+name: Build OpenWV for Windows (MSVC)
 
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch:  # Allows manual trigger
+  workflow_dispatch:
 
 jobs:
-  build-windows:
+  build-windows-msvc:
     runs-on: windows-latest
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
     
-    - name: Setup MSYS2
-      uses: msys2/setup-msys2@v2
-      with:
-        update: true
-        install: >-
-          base-devel
-          mingw-w64-x86_64-toolchain
-          mingw-w64-x86_64-cmake
-          mingw-w64-x86_64-openssl
-          mingw-w64-x86_64-curl
-          mingw-w64-x86_64-protobuf
+    - name: Setup vcpkg
+      run: |
+        git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg
+        C:\vcpkg\bootstrap-vcpkg.bat
+        C:\vcpkg\vcpkg integrate install
     
-    - name: Build with MSYS2
-      shell: msys2 {0}
+    - name: Install dependencies via vcpkg
+      run: |
+        C:\vcpkg\vcpkg install openssl:x64-windows
+        C:\vcpkg\vcpkg install curl:x64-windows
+        C:\vcpkg\vcpkg install protobuf:x64-windows
+    
+    - name: Setup Visual Studio
+      uses: microsoft/setup-msbuild@v1
+    
+    - name: Configure CMake
       run: |
         mkdir build
         cd build
-        cmake -G "MinGW Makefiles" ..
-        mingw32-make -j$(($(nproc)+1))
+        cmake -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake ..
+    
+    - name: Build
+      run: |
+        cd build
+        cmake --build . --config Release
     
     - name: Upload Windows Build
       uses: actions/upload-artifact@v3
       with:
-        name: openwv-windows-build
-        path: build/
+        name: openwv-windows-msvc-build
+        path: build/Release/
