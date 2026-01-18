@@ -5,44 +5,48 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch:
+  workflow_dispatch: # Lets you manually trigger the build anytime
 
 jobs:
   build-windows-msvc:
     runs-on: windows-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-    
+    # 1. Check out your code using the latest supported action
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # 2. Setup vcpkg (official Microsoft package manager for C++ dependencies)
     - name: Setup vcpkg
-      run: |
-        git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg
-        C:\vcpkg\bootstrap-vcpkg.bat
-        C:\vcpkg\vcpkg integrate install
-    
-    - name: Install dependencies via vcpkg
-      run: |
-        C:\vcpkg\vcpkg install openssl:x64-windows
-        C:\vcpkg\vcpkg install curl:x64-windows
-        C:\vcpkg\vcpkg install protobuf:x64-windows
-    
-    - name: Setup Visual Studio
-      uses: microsoft/setup-msbuild@v1
-    
+      uses: microsoft/vcpkg-action@v1
+      with:
+        vcpkg-version: latest
+
+    # 3. Install all required dependencies for OpenWV
+    - name: Install build dependencies
+      run: vcpkg install openssl:x64-windows curl:x64-windows protobuf:x64-windows
+
+    # 4. Setup Visual Studio MSBuild tools
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    # 5. Configure CMake project
     - name: Configure CMake
       run: |
-        mkdir build
+        mkdir -p build
         cd build
-        cmake -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake ..
-    
-    - name: Build
+        cmake .. -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_INSTALLATION_ROOT }}/scripts/buildsystems/vcpkg.cmake -A x64
+
+    # 6. Compile the project in Release mode
+    - name: Build OpenWV
       run: |
         cd build
-        cmake --build . --config Release
-    
-    - name: Upload Windows Build
-      uses: actions/upload-artifact@v3
+        msbuild openwv.sln /p:Configuration=Release /m
+
+    # 7. Upload finished build files using the latest supported artifact action
+    - name: Upload Release build
+      uses: actions/upload-artifact@v4
       with:
-        name: openwv-windows-msvc-build
+        name: openwv-windows-msvc
         path: build/Release/
+        if-no-files-found: error # Fails early if build produced no files
