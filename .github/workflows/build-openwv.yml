@@ -1,0 +1,24 @@
+name: Build OpenWV Windows
+
+on:
+workflow_dispatch:
+
+jobs:
+build:
+runs-on: windows-latest
+steps:
+- uses: actions/checkout@v4
+with:
+submodules: recursive
+
+  - uses: actions-rs/toolchain@v1
+    with:
+      toolchain: stable
+      override: true
+
+  - run: cargo build --release
+
+  - uses: actions/upload-artifact@v4
+    with:
+      name: openwv-windows
+      path: target/release/widevinecdm.dll
