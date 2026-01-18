@@ -7,7 +7,6 @@ jobs:
 build:
 runs-on: windows-latest
 
-```
 steps:
   - name: Checkout repository
     uses: actions/checkout@v4
@@ -28,4 +27,3 @@ steps:
     with:
       name: openwv-windows
       path: target/release/widevinecdm.dll
-```
