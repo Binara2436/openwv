@@ -1,52 +1,48 @@
-name: Build OpenWV for Windows (MSVC)
+name: Build OpenWV for Windows
 
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch: # Lets you manually trigger the build anytime
+  workflow_dispatch:  # Allows manual trigger
 
 jobs:
-  build-windows-msvc:
+  build-windows:
     runs-on: windows-latest
     
     steps:
-    # 1. Check out your code using the latest supported action
     - name: Checkout repository
       uses: actions/checkout@v4
-
-    # 2. Setup vcpkg (official Microsoft package manager for C++ dependencies)
-    - name: Setup vcpkg
-      uses: microsoft/vcpkg-action@v1
       with:
-        vcpkg-version: latest
+        submodules: recursive  # Clone submodules if any
 
-    # 3. Install all required dependencies for OpenWV
-    - name: Install build dependencies
-      run: vcpkg install openssl:x64-windows curl:x64-windows protobuf:x64-windows
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
 
-    # 4. Setup Visual Studio MSBuild tools
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
-
-    # 5. Configure CMake project
-    - name: Configure CMake
+    - name: Install Meson and Ninja
       run: |
-        mkdir -p build
-        cd build
-        cmake .. -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_INSTALLATION_ROOT }}/scripts/buildsystems/vcpkg.cmake -A x64
+        pip install meson ninja
 
-    # 6. Compile the project in Release mode
-    - name: Build OpenWV
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Configure with Meson
       run: |
-        cd build
-        msbuild openwv.sln /p:Configuration=Release /m
+        meson setup build --buildtype=release
 
-    # 7. Upload finished build files using the latest supported artifact action
-    - name: Upload Release build
+    - name: Build
+      run: |
+        meson compile -C build
+
+    - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: openwv-windows-msvc
-        path: build/Release/
-        if-no-files-found: error # Fails early if build produced no files
+        name: openwv-windows-build
+        path: |
+          build/*.exe
+          build/*.dll
+          build/*.lib
+        if-no-files-found: warn
