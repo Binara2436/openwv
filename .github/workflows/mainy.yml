@@ -1,0 +1,73 @@
+# Build OpenWV on Windows and upload the resulting DLL artifact
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-windows:
+    name: Build OpenWV (Windows x86_64)
+    runs-on: windows-latest
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - name: Checkout repository (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Cache Cargo and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install LLVM (clang) via Chocolatey
+        shell: powershell
+        run: |
+          choco install llvm -y --no-progress
+          # ensure LLVM bin is on PATH for the remainder of the job
+          $llvm = 'C:\Program Files\LLVM\bin'
+          Write-Host "Adding $llvm to PATH"
+          $env:PATH = "$llvm;$env:PATH"
+          Write-Host "clang version:"
+          clang --version
+
+      - name: Setup Rust (stable)
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Ensure embedded.wvd is present (decode from secret)
+        shell: powershell
+        run: |
+          if (-not $env:EMBEDDED_WVD_BASE64) {
+            Write-Error "Secret EMBEDDED_WVD_BASE64 is not set. Create repository secret EMBEDDED_WVD_BASE64 with base64(embedded.wvd)"
+            exit 1
+          }
+          [IO.File]::WriteAllBytes('embedded.wvd', [Convert]::FromBase64String($env:EMBEDDED_WVD_BASE64))
+          Write-Host "wvd file written (size bytes):" (Get-Item embedded.wvd).Length
+
+      - name: Build (cargo release)
+        shell: powershell
+        run: |
+          # Use release build
+          cargo build --release
+
+      - name: Show produced files in target/release
+        shell: powershell
+        run: |
+          Get-ChildItem -Path target\release -File | Select-Object Name,Length
+
+      - name: Upload built DLL(s)
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwv-windows-artifacts
+          path: target/release/*.dll
